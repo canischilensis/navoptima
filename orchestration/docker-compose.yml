@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   # ============================================================================
-  # SERVICIO DE BASE DE DATOS (Data Warehouse - Gold Layer)
+  # 1. MICROSERVICIO DE BASE DE DATOS (Data Warehouse)
   # ============================================================================
   database:
     image: postgres:15-alpine
@@ -13,13 +13,10 @@ services:
       POSTGRES_PASSWORD: nav_password
       POSTGRES_DB: navoptima_warehouse
     ports:
-      - "5432:5432"  # Expone el puerto para que te conectes desde DBeaver/Tableau
+      - "5432:5432"
     volumes:
-      # 1. Persistencia de datos (para que no se borren al apagar)
       - postgres_data:/var/lib/postgresql/data
-      
-      # 2. Inicialización del Esquema (TU CAMBIO CLAVE)
-      # Postgres ejecuta automáticamente los .sql en esta carpeta al iniciar por primera vez
+      # Apunta al script SQL que creamos antes
       - ../docs/design/005-gold-schema-ddl.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - nav_network
@@ -30,41 +27,54 @@ services:
       retries: 5
 
   # ============================================================================
-  # SERVICIO WORKER (Donde corre tu código Python / ETL)
+  # 2. MICROSERVICIO WORKER (ETL / Ingesta)
   # ============================================================================
   ingestion_worker:
-    # Construye la imagen usando el Dockerfile que está en esta misma carpeta
     build:
       context: ..
       dockerfile: orchestration/Dockerfile
     container_name: navoptima_worker
-    
-    # Variables de entorno para que Python encuentre la BD
     environment:
       - DB_USER=nav_user
       - DB_PASS=nav_password
-      - DB_HOST=database  # ¡OJO! Aquí usamos el nombre del servicio, no 'localhost'
+      - DB_HOST=database
       - DB_PORT=5432
       - DB_NAME=navoptima_warehouse
-    
-    # Montamos el código y los datos para desarrollo (Hot-Reloading)
     volumes:
-      - ../src:/app/src       # Tu código fuente
-      - ../data:/app/data     # Tus archivos CSV y NetCDF
-    
-    # Espera a que la BD esté saludable antes de iniciar
+      - ../src:/app/src
+      - ../data:/app/data
     depends_on:
       database:
         condition: service_healthy
-    
-    # Mantiene el contenedor vivo para que puedas ejecutar comandos manualmente
     command: tail -f /dev/null
     networks:
       - nav_network
 
-# ==============================================================================
-# DEFINICIONES DE RED Y VOLUMENES
-# ==============================================================================
+  # ============================================================================
+  # 3. MICROSERVICIO API (ML Serving / Inferencia)
+  # ============================================================================
+  inference_api:
+    build:
+      context: ..
+      dockerfile: orchestration/Dockerfile
+    container_name: navoptima_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_USER=nav_user
+      - DB_PASS=nav_password
+      - DB_HOST=database
+      - DB_NAME=navoptima_warehouse
+    volumes:
+      - ../src:/app/src
+      - ../models:/app/models
+    depends_on:
+      database:
+        condition: service_healthy
+    command: uvicorn src.ml_engine.serving.api:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - nav_network
+
 networks:
   nav_network:
     driver: bridge
