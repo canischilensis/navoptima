@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   # ============================================================================
-  # 1. MICROSERVICIO DE BASE DE DATOS (Data Warehouse)
+  # 1. DATA WAREHOUSE
   # ============================================================================
   database:
     image: postgres:15-alpine
@@ -16,7 +16,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Apunta al script SQL que creamos antes
       - ../docs/design/005-gold-schema-ddl.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - nav_network
@@ -27,7 +26,24 @@ services:
       retries: 5
 
   # ============================================================================
-  # 2. MICROSERVICIO WORKER (ETL / Ingesta)
+  # 2. MLFLOW SERVER
+  # ============================================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.2
+    container_name: navoptima_mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    volumes:
+      - mlflow_data:/mlflow
+    command: mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlflow/artifacts --host 0.0.0.0 --port 5000
+    networks:
+      - nav_network
+
+  # ============================================================================
+  # 3. WORKER (ETL & Entrenamiento)
   # ============================================================================
   ingestion_worker:
     build:
@@ -40,18 +56,23 @@ services:
       - DB_HOST=database
       - DB_PORT=5432
       - DB_NAME=navoptima_warehouse
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - ../src:/app/src
       - ../data:/app/data
+      - ../models:/app/models
+      - mlflow_data:/mlflow
     depends_on:
       database:
         condition: service_healthy
+      mlflow:
+        condition: service_started
     command: tail -f /dev/null
     networks:
       - nav_network
 
   # ============================================================================
-  # 3. MICROSERVICIO API (ML Serving / Inferencia)
+  # 4. API DE INFERENCIA
   # ============================================================================
   inference_api:
     build:
@@ -65,12 +86,16 @@ services:
       - DB_PASS=nav_password
       - DB_HOST=database
       - DB_NAME=navoptima_warehouse
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - ../src:/app/src
       - ../models:/app/models
+      - mlflow_data:/mlflow
     depends_on:
       database:
         condition: service_healthy
+      mlflow:
+        condition: service_started
     command: uvicorn src.ml_engine.serving.api:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - nav_network
@@ -81,3 +106,4 @@ networks:
 
 volumes:
   postgres_data:
+  mlflow_data:
