@@ -28,3 +28,8 @@ python-dotenv>=1.0.0    # Gestión de variables de entorno (.env)
 ipykernel               # Soporte para Jupyter Notebooks en VS Code/WSL2
 pathlib                 # Gestión de rutas agnóstica al OS (Windows/Linux)
 dotenv
+
+# --- Sistema de Google Cloud ---
+google-cloud-bigquery>=3.0.0
+google-cloud-alloydb-connector[pg8000]>=1.0.0
+sqlalchemy>=2.0.0
