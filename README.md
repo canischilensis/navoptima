@@ -1,72 +1,71 @@
-
-# **🧭 NavOptima: Plataforma de Ingeniería de Datos para Eficiencia de Combustible**
+# **🧭 NavOptima: Plataforma de Ingeniería de Datos y MLOps para Eficiencia de Combustible**
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Container-blue?style=for-the-badge&logo=docker&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![Postgres](https://img.shields.io/badge/PostgreSQL-15-336791?style=for-the-badge&logo=postgresql&logoColor=white)
 ![XGBoost](https://img.shields.io/badge/XGBoost-Model-red?style=for-the-badge&logo=xgboost&logoColor=white)
-![Power Bi](https://img.shields.io/badge/power_bi-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)
+![MLflow](https://img.shields.io/badge/MLflow-Tracking-blue?style=for-the-badge&logo=mlflow&logoColor=white)
+![Airflow](https://img.shields.io/badge/Apache%20Airflow-Orchestration-blue?style=for-the-badge&logo=apache-airflow&logoColor=white)
 
-## Copyright & License / Licencia y Derechos de Autor
+## **Copyright & License / Licencia**
 
-**Copyright (c) [2026]. All Rights Reserved.**
-
-### English
-This project is proprietary and confidential. Unauthorized copying, distribution, modification, or use of this source code or any associated files, via any medium, is strictly prohibited. 
-
-This repository is for portfolio/demonstration purposes only. No license is granted to use this software.
-
----
-
-### Español
 **Copyright (c) [2026]. Todos los derechos reservados.**
 
-Este proyecto es propietario y confidencial. Queda estrictamente prohibida la copia, distribución, modificación o uso no autorizado de este código fuente o cualquiera de sus archivos asociados, por cualquier medio.
-
-Este repositorio es únicamente con fines de demostración o portafolio. No se otorga ninguna licencia para usar este software.
+Este proyecto es propietario y confidencial. Queda estrictamente prohibida la copia, distribución, modificación o uso no autorizado de este código fuente. Este repositorio es únicamente con fines de demostración o portafolio profesional.
 
 ---
 
 ## **📝 Resumen del Proyecto**
 
-**NavOptima** es una plataforma de inteligencia operativa diseñada para procesar telemetría marítima y variables climáticas con el fin de optimizar el costo de combustible.
+**NavOptima** es una plataforma de inteligencia operativa y **MLOps** diseñada para procesar telemetría marítima y variables climáticas masivas. Su objetivo principal es optimizar el consumo de combustible de la flota mediante el uso de **Gemelos Digitales** y modelos predictivos de alta precisión.
 
-El sistema implementa una arquitectura **Lakehouse** completa sobre microservicios. Transforma datos crudos de posicionamiento (AIS) y meteorología (ERA5) en insights financieros y predicciones de consumo auditables, permitiendo monitorear la eficiencia de la flota mediante un "Gemelo Digital" validado físicamente.
+El sistema implementa una arquitectura **Lakehouse** que transforma señales de posicionamiento (AIS) y datos meteorológicos (ERA5) en decisiones financieras auditables, permitiendo monitorear la eficiencia energética en tiempo real.
 
-## **🏗️ Arquitectura del Sistema (v1.0)**
+## **🏗️ Arquitectura del Sistema (Medallion + MLOps)**
 
-El proyecto ha evolucionado a una arquitectura contenerizada orquestada por Docker Compose, siguiendo el patrón **Medallion Architecture**.
+La arquitectura sigue el patrón **Medallion (Bronze-Silver-Gold)** orquestado completamente por Docker Compose y Apache Airflow.
 
 ```mermaid
 graph LR
-    A[Fuentes: AIS + ERA5] -->|Ingesta Batch| B(Ingestion Worker - Python)
-    B -->|ETL & SCD2| C[(PostgreSQL DW - Capa Gold)]
-    C -->|Datos Históricos| D{API de Inferencia - XGBoost}
-    C -->|Visualización| E[Power BI Dashboard]
-    D -->|Predicción Real-Time| E
+    A[Fuentes: AIS + ERA5] -->|Ingesta Batch (Airflow)| B(Ingestion Worker - Python)
+    B -->|Limpieza & Validación| C[(PostgreSQL DW - Capa Silver)]
+    C -->|Agregación SCD2| D[(Capa Gold - Analítica)]
+    D -->|Entrenamiento| E{ML Engine - MLflow}
+    E -->|Modelo Versionado| F[Inference API - FastAPI]
+    F -->|Predicción Real-Time| G[Dashboard Power BI]
 
 ```
 
-### Microservicios Desplegados
+### Flujo de Datos
 
-| Servicio | Contenedor | Puerto | Función |
-| --- | --- | --- | --- |
-| **Data Warehouse** | `navoptima_db` | `5432` | Base de datos PostgreSQL con esquema **3FN/Estrella**. Maneja historia de activos (SCD Tipo 2). |
-| **ETL Worker** | `navoptima_worker` | N/A | Motor de procesamiento Python. Ejecuta limpieza, fusión climática y carga masiva. |
-| **Inference API** | `navoptima_api` | `8000` | Servicio FastAPI que expone el modelo XGBoost para predicciones en tiempo real. |
+1. **Capa Bronze (Ingesta):** Ingesta idempotente de archivos AIS y Clima.
+2. **Capa Silver (Procesamiento):** Validación de esquemas con **Pydantic** y enriquecimiento espacio-temporal.
+3. **Capa Gold (Analítica & ML):** Tablas con **SCD Tipo 2** para auditoría histórica y datasets de entrenamiento.
+4. **Serving:** API REST que descarga dinámicamente modelos desde el **Model Registry** de MLflow.
+
+## **🛠️ Pila Tecnológica (Tech Stack)**
+
+| Categoría | Tecnologías | Función Principal |
+| --- | --- | --- |
+| **Orquestación** | **Apache Airflow** | Gestión de pipelines ETL y dependencias. |
+| **Backend** | **FastAPI** | API de inferencia de alta velocidad. |
+| **MLOps** | **MLflow** | Experiment Tracking & Model Registry. |
+| **Data Warehouse** | **PostgreSQL 16** | Arquitectura 3FN/Estrella con PostGIS. |
+| **Modelado ML** | **XGBoost** | Regresión no lineal para consumo de combustible. |
+| **Visualización** | **Power BI** | Dashboards ejecutivos. |
 
 ## **🚀 Guía de Inicio Rápido (Getting Started)**
 
 ### 1. Requisitos Previos
 
 * Docker Desktop & Docker Compose.
-* Power BI Desktop (para visualización).
 * Git.
+* Python 3.10+ (opcional para desarrollo local).
 
 ### 2. Despliegue de Infraestructura
 
-Levantar toda la plataforma con un solo comando desde la carpeta del proyecto:
+Levantar todo el stack (Airflow, DB, MLflow, API) con un solo comando:
 
 ```bash
 cd orchestration
@@ -74,57 +73,35 @@ docker compose up -d --build
 
 ```
 
-### 3. Ingesta de Datos (Poblado Inicial)
+### 3. Acceso a Servicios
 
-Una vez activos los contenedores, ejecutar el script de carga para llenar el Data Warehouse con los datos procesados:
+Una vez desplegados los contenedores, accede a las interfaces:
 
-```bash
-docker exec -it navoptima_worker python src/data_processor/loader.py
+* **API de Inferencia (Swagger):** `http://localhost:8000/docs`
+* **MLflow UI (Tracking):** `http://localhost:5000`
+* **Airflow UI (Pipelines):** `http://localhost:8080`
 
-```
+## **📊 Modelo de Datos & ML**
 
-### 4. Uso de la API de Predicción
+El núcleo analítico está diseñado para soportar auditoría financiera:
 
-La API estará disponible localmente.
-
-* **Swagger UI:** `http://localhost:8000/docs`
-* **Endpoint:** `POST /predict`
-
-## **📊 Modelo de Datos (Capa Gold)**
-
-Diseñado para soportar auditoría financiera y ML:
-
-* **`fact_vessel_performance`**: Tabla central de hechos. Métricas físicas (velocidad, calado) y financieras.
-* **`dim_vessels`**: Dimensión con **SCD Tipo 2** (History Tracking) para trazabilidad de cambios en la flota.
-* **`dim_weather_metrics`**: Catálogo normalizado de condiciones ambientales.
-* **`dim_vessel_types`**: Maestro de tipos normalizado (3FN).
-
-## **🧠 Inteligencia Artificial (MLOps)**
-
-El núcleo es un modelo **XGBoost Regressor** (`xgb_navoptima_v1.json`).
-
-* **Entrenamiento:** Pipeline automático en `src/ml_engine/training`.
-* **Features:** Velocidad (), Calado, Eslora, Viento (), Olas ().
-* **Métricas (Test Set):**
-* ** Score:** ~97%
-* **RMSE:** ~2.73 kg/h
-
-
+* **`fact_vessel_performance`**: Tabla central de hechos. Métricas físicas y financieras.
+* **`dim_vessels`**: Dimensión con **SCD Tipo 2** para trazabilidad de cambios en la flota.
+* **Modelo XGBoost:** Entrenado con features de Velocidad, Calado, Viento y Olas, logrando un RMSE de ~2.73 kg/h en pruebas.
 
 ## **📂 Estructura del Proyecto**
 
 ```text
 navoptima/
-├── data/               # Data Lake (Raw, Processed)
-├── docs/               # Documentación (ADR, DDL, Diseño)
-├── models/             # Artefactos Binarios (.json, .pkl)
-├── notebooks/          # Laboratorio de Data Science
-├── orchestration/      # Docker Compose & Dockerfiles
-├── reports/            # Reportes de Resultados
-├── src/                # Código Fuente Modular
-│   ├── data_processor  # Lógica ETL (Loader)
-│   ├── ml_engine       # API (Serving) y Training
-│   └── ingestion_worker # Estrategias de Ingesta
-└── README.md           # Esta documentación
+├── data/                  # Data Lake local (Raw, Processed)
+├── docs/                  # Documentación (ADR, DDL, Arquitectura)
+├── notebooks/             # EDA y Prototipado (Jupyter)
+├── orchestration/         # Docker Compose, Airflow DAGs y Dockerfiles
+├── src/                   # Código Fuente Modular
+│   ├── ingestion_worker   # Extracción (Capa Bronze)
+│   ├── data_processor     # Transformación ETL (Capa Silver/Gold)
+│   ├── ml_engine          # Entrenamiento (MLflow) y Serving (FastAPI)
+│   └── shared             # Schemas Pydantic y utilidades comunes
+└── README.md              # Documentación principal
 
 ```
