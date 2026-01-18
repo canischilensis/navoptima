@@ -1,83 +1,114 @@
 import os
 import xgboost as xgb
 import pandas as pd
+import mlflow.xgboost
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 
 # ==============================================================================
-# CONFIGURACIÓN DE RUTAS ROBUSTAS
+# CONFIGURACIÓN DE MLOPS
 # ==============================================================================
-# Definimos la raíz del proyecto basándonos en la ubicación de ESTE archivo
-# src/ml_engine/serving/ -> subimos 3 niveles -> raiz del proyecto
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "../../../"))
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+MODEL_NAME = "NavOptima_Fuel_Model"
+MODEL_STAGE = "Production"
 
-# Rutas del modelo (Docker vs Local)
+# Rutas de respaldo (Fallback local)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH_DOCKER = "/app/models/xgb_navoptima_v1.json"
-MODEL_PATH_LOCAL = os.path.join(PROJECT_ROOT, "models", "xgb_navoptima_v1.json")
+MODEL_PATH_LOCAL = os.path.abspath(os.path.join(BASE_DIR, "../../../models/xgb_navoptima_v1.json"))
 
 model = None
+model_source = "None"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ciclo de vida: Carga el modelo al iniciar."""
-    global model
+    """
+    Ciclo de vida de la aplicación:
+    """
+    global model, model_source
     
-    # Lógica de fallback: Intenta ruta Docker, si no existe, usa Local
-    path = MODEL_PATH_DOCKER if os.path.exists(MODEL_PATH_DOCKER) else MODEL_PATH_LOCAL
-    
-    print(f"📂 Buscando modelo en: {path}")
-    
-    if os.path.exists(path):
-        try:
-            model = xgb.Booster()
-            model.load_model(path)
-            print("✅ ¡ÉXITO! Modelo XGBoost cargado en memoria.")
-        except Exception as e:
-            print(f"❌ Error al leer el archivo del modelo: {e}")
-    else:
-        print(f"⚠️ ERROR CRÍTICO: Archivo no encontrado. Verifica que 'xgb_navoptima_v1.json' esté en la carpeta models/.")
-    
+    # --- INTENTO 1: MLFLOW REGISTRY ---
+    try:
+        print(f"📡 Conectando a MLflow Registry en: {MLFLOW_URI}")
+        mlflow.set_tracking_uri(MLFLOW_URI)
+        
+        # Ruta del modelo en el registro: models:/Nombre/Etiqueta
+        model_uri = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
+        
+        print(f"🧠 Intentando cargar modelo desde Registry: {model_uri}")
+        # Cargamos el modelo usando el wrapper de MLflow
+        model = mlflow.xgboost.load_model(model_uri)
+        model_source = f"MLflow Registry ({MODEL_STAGE})"
+        print(f"✅ ¡ÉXITO! Modelo '{MODEL_NAME}' cargado desde el Registry.")
+        
+    except Exception as e:
+        print(f"⚠️ Error al conectar con MLflow o modelo no encontrado: {e}")
+        print("📦 Iniciando modo de contingencia (Carga de archivo local)...")
+        
+        # --- INTENTO 2: ARCHIVO LOCAL (FALLBACK) ---
+        path = MODEL_PATH_DOCKER if os.path.exists(MODEL_PATH_DOCKER) else MODEL_PATH_LOCAL
+        
+        if os.path.exists(path):
+            try:
+                model_booster = xgb.Booster()
+                model_booster.load_model(path)
+                model = model_booster
+                model_source = "Local File (Contingency)"
+                print(f"✅ Modelo local cargado exitosamente desde: {path}")
+            except Exception as ex:
+                print(f"❌ Error crítico al leer el archivo del modelo local: {ex}")
+        else:
+            print(f"🚨 ERROR CRÍTICO: No se encontró ningún modelo en {path}")
+
     yield
     print("🛑 Servicio de inferencia detenido.")
 
-app = FastAPI(title="NavOptima Inference API", version="1.0", lifespan=lifespan)
+app = FastAPI(
+    title="NavOptima Inference API", 
+    version="2.0", 
+    lifespan=lifespan
+)
 
 # ==============================================================================
-# ESQUEMAS DE DATOS (Pydantic v2 Updated)
+# ESQUEMAS DE DATOS (Input Validation)
 # ==============================================================================
 class VoyageParameters(BaseModel):
-    sog: float = Field(..., gt=0, description="Velocidad (knots)", json_schema_extra={"example": 12.5})
-    draft: float = Field(..., gt=0, description="Calado (m)", json_schema_extra={"example": 7.2})
-    length: float = Field(..., gt=0, description="Eslora (m)", json_schema_extra={"example": 200.0})
+    sog: float = Field(..., ge=0, description="Velocidad (knots)", json_schema_extra={"example": 12.5})
+    draft: float = Field(..., ge=0, description="Calado (m)", json_schema_extra={"example": 7.2})
+    length: float = Field(..., ge=0, description="Eslora (m)", json_schema_extra={"example": 200.0})
     wind_speed: float = Field(..., ge=0, description="Viento (m/s)", json_schema_extra={"example": 15.0})
     wave_height: float = Field(..., ge=0, description="Olas (m)", json_schema_extra={"example": 2.5})
 
 class PredictionResponse(BaseModel):
     fuel_consumption_kgh: float
-    confidence_score: float = 1.0
+    source: str
+    confidence_score: float
 
 # ==============================================================================
 # ENDPOINTS
 # ==============================================================================
 @app.get("/")
 def home():
-    return {"message": "NavOptima AI Service is Running", "docs": "/docs"}
+    return {
+        "message": "NavOptima AI Service is Running", 
+        "model_loaded": model is not None,
+        "active_source": model_source,
+        "docs": "/docs"
+    }
 
 @app.get("/health")
 def health_check():
     if model:
-        return {"status": "healthy", "model_loaded": True}
+        return {"status": "healthy", "model_source": model_source}
     return {"status": "degraded", "model_loaded": False}
 
 @app.post("/predict", response_model=PredictionResponse)
 def predict_consumption(params: VoyageParameters):
     if not model:
-        raise HTTPException(status_code=503, detail="Modelo no disponible.")
+        raise HTTPException(status_code=503, detail="Modelo no cargado en memoria.")
 
     try:
-        # Vector de entrada (Orden estricto según entrenamiento)
         input_data = pd.DataFrame([{
             'sog': params.sog,
             'draft': params.draft,
@@ -86,19 +117,22 @@ def predict_consumption(params: VoyageParameters):
             'wave_height': params.wave_height
         }])
 
-        dmatrix = xgb.DMatrix(input_data)
-        prediction = model.predict(dmatrix)
+        if isinstance(model, xgb.Booster):
+            dmatrix = xgb.DMatrix(input_data)
+            prediction = model.predict(dmatrix)
+        else:
+            prediction = model.predict(input_data)
         
         return {
             "fuel_consumption_kgh": round(float(prediction[0]), 2),
+            "source": model_source,
             "confidence_score": 0.95
         }
 
     except Exception as e:
-        print(f"❌ Error durante inferencia: {e}")
-        raise HTTPException(status_code=500, detail="Error interno en el cálculo.")
+        print(f"❌ Error durante la ejecución de la inferencia: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
-    # Hot reload activado para desarrollo rápido
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
