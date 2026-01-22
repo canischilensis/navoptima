@@ -1,0 +1,20 @@
+git add .
+git commit -m "feat: pipeline completo (ETL+EDA) y modelo XGBoost con enriquecimiento climatico ERA5
+
+- Infraestructura:
+  - Creacion de estructura de carpetas (data/{raw,processed,curated}, models/).
+  - Actualizacion de requirements.txt con pyarrow, cdsapi y xarray.
+
+- Notebook 01 (EDA & ETL):
+  - Implementacion de carga por 'chunks' para evitar MemoryError con CSVs grandes.
+  - Limpieza de datos AIS y validacion de fisica base (Ley del Cubo).
+
+- Notebook 02 (Feature Engineering):
+  - Creacion de variables sinteticas (sog_capped) para manejo de outliers.
+  - Seleccion de features basada en importancia fisica.
+
+- Notebook 03 (Data Fusion & ML):
+  - Integracion con API Copernicus (ERA5) para descarga de viento y oleaje.
+  - Solucion a NaNs costeros mediante interpolacion hibrida (Nearest/Linear).
+  - Entrenamiento y guardado de modelo XGBoost v1 (JSON/PKL).
+"
