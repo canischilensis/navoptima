@@ -28,13 +28,12 @@ La arquitectura sigue el patrón **Medallion (Bronze-Silver-Gold)** orquestado c
 
 ```mermaid
 graph LR
-    A[Fuentes: AIS + ERA5] -->|Ingesta Batch (Airflow)| B(Ingestion Worker - Python)
+    A[Fuentes: AIS + ERA5] -->|Ingesta Batch Airflow| B(Ingestion Worker - Python)
     B -->|Limpieza & Validación| C[(PostgreSQL DW - Capa Silver)]
     C -->|Agregación SCD2| D[(Capa Gold - Analítica)]
     D -->|Entrenamiento| E{ML Engine - MLflow}
     E -->|Modelo Versionado| F[Inference API - FastAPI]
     F -->|Predicción Real-Time| G[Dashboard Power BI]
-
 ```
 
 ### Flujo de Datos
@@ -103,5 +102,6 @@ navoptima/
 │   ├── ml_engine          # Entrenamiento (MLflow) y Serving (FastAPI)
 │   └── shared             # Schemas Pydantic y utilidades comunes
 └── README.md              # Documentación principal
+
 
 ```
